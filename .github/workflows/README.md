@@ -83,3 +83,22 @@ Releases are tagged with prefixes:
 - Go client: `client-v*`
 - Extension: `extension-v*`
 
+## Permissions
+
+The release workflows require `contents: write` permission to create GitHub releases. This is automatically granted via the `permissions` block in each workflow.
+
+If you encounter 403 errors when creating releases, check:
+
+1. **Repository Settings** → **Actions** → **General** → **Workflow permissions**
+   - Should be set to "Read and write permissions" (not "Read repository contents and packages permissions")
+
+2. **Repository Settings** → **Actions** → **General** → **Allow GitHub Actions to create and approve pull requests**
+   - Should be enabled if you want workflows to create releases
+
+3. The workflows include explicit permissions:
+   ```yaml
+   permissions:
+     contents: write
+     actions: read
+   ```
+
