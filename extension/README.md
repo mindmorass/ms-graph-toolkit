@@ -85,8 +85,10 @@ To modify the extension:
 
 ## Icons
 
-The extension includes placeholder icon files. For production, you should create proper icons:
+The extension includes simple placeholder icons with a "G" (for Graph) on a Microsoft blue background (#0078d4). For production, you may want to create more polished icons:
 - `icon16.png` - 16x16 pixels
 - `icon48.png` - 48x48 pixels  
 - `icon128.png` - 128x128 pixels
+
+The current icons are valid PNG files and will work for installation and basic use.
 
