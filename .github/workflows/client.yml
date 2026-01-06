@@ -26,10 +26,6 @@ jobs:
             goos: linux
             goarch: amd64
             artifact_name: ms_graph_linux_amd64
-          - os: windows-latest
-            goos: windows
-            goarch: amd64
-            artifact_name: ms_graph_windows_amd64.exe
           - os: macos-latest
             goos: darwin
             goarch: amd64
@@ -83,12 +79,8 @@ jobs:
           mkdir -p release
           for artifact in artifacts/*/; do
             artifact_name=$(basename "$artifact")
-            if [[ "$artifact_name" == *.exe ]]; then
-              cp "$artifact/$artifact_name" "release/$artifact_name"
-            else
-              cp "$artifact/$artifact_name" "release/$artifact_name"
-              chmod +x "release/$artifact_name"
-            fi
+            cp "$artifact/$artifact_name" "release/$artifact_name"
+            chmod +x "release/$artifact_name"
           done
           cd release
           tar -czf ms_graph_client.tar.gz *
@@ -124,7 +116,6 @@ jobs:
             
             ### Supported Platforms
             - Linux (amd64)
-            - Windows (amd64)
             - macOS (amd64, arm64)
             
             ### Usage

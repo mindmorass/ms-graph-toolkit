@@ -13,7 +13,6 @@ Builds and releases the Go client for multiple platforms.
 
 **Builds:**
 - Linux (amd64)
-- Windows (amd64)
 - macOS (amd64, arm64)
 
 **Releases:**
