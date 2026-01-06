@@ -1,0 +1,38 @@
+{
+  "manifest_version": 3,
+  "name": "Microsoft Graph Token Extractor",
+  "version": "1.0.0",
+  "description": "Extracts access and refresh tokens from Microsoft Graph Explorer",
+  "permissions": [
+    "storage",
+    "clipboardWrite"
+  ],
+  "host_permissions": [
+    "https://developer.microsoft.com/*",
+    "https://graph.microsoft.com/*",
+    "https://login.microsoftonline.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://developer.microsoft.com/graph/graph-explorer*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icon16.png",
+      "48": "icon48.png",
+      "128": "icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  }
+}
+

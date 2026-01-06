@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+
+jobs:
+  client-test:
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'pull_request' ||
+      contains(github.event.head_commit.modified, 'client/') ||
+      contains(github.event.head_commit.added, 'client/')
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+          cache-dependency-path: client/go.sum
+
+      - name: Run tests
+        working-directory: client
+        run: |
+          go test ./...
+
+      - name: Run linter
+        working-directory: client
+        run: |
+          go vet ./...
+          go fmt ./...
+
+      - name: Build
+        working-directory: client
+        run: |
+          go build ./...
+
+  extension-validate:
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'pull_request' ||
+      contains(github.event.head_commit.modified, 'extension/') ||
+      contains(github.event.head_commit.added, 'extension/')
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate extension files
+        run: |
+          echo "Validating extension structure..."
+          [ -f extension/manifest.json ] || exit 1
+          [ -f extension/content.js ] || exit 1
+          [ -f extension/popup.html ] || exit 1
+          [ -f extension/popup.js ] || exit 1
+          echo "✓ All required files present"
+
+      - name: Validate manifest.json
+        run: |
+          cd extension
+          python3 -m json.tool manifest.json > /dev/null || exit 1
+          echo "✓ manifest.json is valid JSON"
+
+      - name: Check for syntax errors in JS files
+        run: |
+          if command -v node &> /dev/null; then
+            node --check extension/content.js
+            node --check extension/popup.js
+            echo "✓ JavaScript files are valid"
+          else
+            echo "⚠ Node.js not available, skipping JS validation"
+          fi
+

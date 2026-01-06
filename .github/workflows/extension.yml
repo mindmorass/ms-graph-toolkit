@@ -1,0 +1,131 @@
+name: Build and Release Chrome Extension
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'extension/**'
+      - '.github/workflows/extension.yml'
+  pull_request:
+    branches:
+      - main
+      - master
+    paths:
+      - 'extension/**'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate extension files
+        run: |
+          echo "Validating extension structure..."
+          [ -f extension/manifest.json ] || exit 1
+          [ -f extension/content.js ] || exit 1
+          [ -f extension/popup.html ] || exit 1
+          [ -f extension/popup.js ] || exit 1
+          echo "✓ All required files present"
+
+      - name: Validate manifest.json
+        run: |
+          cd extension
+          # Check if manifest.json is valid JSON
+          python3 -m json.tool manifest.json > /dev/null || exit 1
+          echo "✓ manifest.json is valid JSON"
+
+      - name: Package extension
+        run: |
+          cd extension
+          zip -r ../ms_graph_extension.zip . \
+            -x "*.git*" \
+            -x "README.md" \
+            -x "*.DS_Store"
+          echo "✓ Extension packaged"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: chrome-extension
+          path: ms_graph_extension.zip
+          retention-days: 30
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: chrome-extension
+          path: release
+
+      - name: Get version from tag or commit
+        id: version
+        run: |
+          if [ "${{ github.ref_type }}" == "tag" ]; then
+            VERSION="${{ github.ref_name }}"
+          else
+            VERSION="v$(date +'%Y%m%d')-${GITHUB_SHA::8}"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+
+      - name: Extract extension version from manifest
+        id: manifest_version
+        run: |
+          VERSION=$(grep -o '"version": "[^"]*"' extension/manifest.json | cut -d'"' -f4)
+          echo "manifest_version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Manifest version: $VERSION"
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            release/ms_graph_extension.zip
+          tag_name: extension-${{ steps.version.outputs.version }}
+          name: Chrome Extension ${{ steps.version.outputs.version }}
+          body: |
+            ## Chrome Extension Release
+            
+            Extension version: ${{ steps.manifest_version.outputs.manifest_version }}
+            Built from commit: ${{ github.sha }}
+            
+            ### Installation
+            
+            1. Download `ms_graph_extension.zip`
+            2. Extract the ZIP file
+            3. Open Chrome and navigate to `chrome://extensions/`
+            4. Enable "Developer mode" (toggle in top right)
+            5. Click "Load unpacked"
+            6. Select the extracted extension directory
+            
+            ### Usage
+            
+            1. Open [Graph Explorer](https://developer.microsoft.com/graph/graph-explorer)
+            2. Sign in and authenticate
+            3. Make a request (click "Run query")
+            4. Click the extension icon to view and copy tokens
+            
+            ### Features
+            
+            - Automatic token extraction from Graph Explorer
+            - Easy-to-use popup interface
+            - One-click copy as environment variables
+            - Secure local storage
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+

@@ -1,0 +1,137 @@
+name: Build and Release Go Client
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'client/**'
+      - '.github/workflows/client.yml'
+  pull_request:
+    branches:
+      - main
+      - master
+    paths:
+      - 'client/**'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            goos: linux
+            goarch: amd64
+            artifact_name: ms_graph_linux_amd64
+          - os: windows-latest
+            goos: windows
+            goarch: amd64
+            artifact_name: ms_graph_windows_amd64.exe
+          - os: macos-latest
+            goos: darwin
+            goarch: amd64
+            artifact_name: ms_graph_darwin_amd64
+          - os: macos-latest
+            goos: darwin
+            goarch: arm64
+            artifact_name: ms_graph_darwin_arm64
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+          cache-dependency-path: client/go.sum
+
+      - name: Build
+        working-directory: client
+        run: |
+          GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -o ${{ matrix.artifact_name }} ./cmd/main.go
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: client/${{ matrix.artifact_name }}
+          retention-days: 30
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create release archive
+        run: |
+          mkdir -p release
+          for artifact in artifacts/*/; do
+            artifact_name=$(basename "$artifact")
+            if [[ "$artifact_name" == *.exe ]]; then
+              cp "$artifact/$artifact_name" "release/$artifact_name"
+            else
+              cp "$artifact/$artifact_name" "release/$artifact_name"
+              chmod +x "release/$artifact_name"
+            fi
+          done
+          cd release
+          tar -czf ms_graph_client.tar.gz *
+          zip -r ms_graph_client.zip *
+
+      - name: Get version from tag or commit
+        id: version
+        run: |
+          if [ "${{ github.ref_type }}" == "tag" ]; then
+            VERSION="${{ github.ref_name }}"
+          else
+            VERSION="v$(date +'%Y%m%d')-${GITHUB_SHA::8}"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            release/ms_graph_client.tar.gz
+            release/ms_graph_client.zip
+          tag_name: client-${{ steps.version.outputs.version }}
+          name: Go Client ${{ steps.version.outputs.version }}
+          body: |
+            ## Go Client Release
+            
+            Built from commit: ${{ github.sha }}
+            
+            ### Downloads
+            - **ms_graph_client.tar.gz** - Archive with all binaries
+            - **ms_graph_client.zip** - ZIP archive with all binaries
+            
+            ### Supported Platforms
+            - Linux (amd64)
+            - Windows (amd64)
+            - macOS (amd64, arm64)
+            
+            ### Usage
+            ```bash
+            export MS_GRAPH_ACCESS_TOKEN="your_token"
+            export MS_GRAPH_REFRESH_TOKEN="your_refresh_token"
+            ./ms_graph_client
+            ```
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
