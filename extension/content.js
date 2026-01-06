@@ -4,26 +4,42 @@
 (function() {
   'use strict';
 
+  console.log('Microsoft Graph Token Extractor: Content script loaded');
+
   // Intercept fetch requests
   const originalFetch = window.fetch;
   window.fetch = function(...args) {
+    const url = args[0];
+    const urlString = typeof url === 'string' ? url : (url instanceof Request ? url.url : '');
+    
+    console.log('Fetch intercepted:', urlString);
+    
     return originalFetch.apply(this, args)
       .then(response => {
         // Clone response to read body without consuming it
         const clonedResponse = response.clone();
         
         // Check if this is a token endpoint request
-        if (args[0] && typeof args[0] === 'string' && args[0].includes('login.microsoftonline.com')) {
+        if (urlString && urlString.includes('login.microsoftonline.com') && urlString.includes('/token')) {
+          console.log('Token endpoint detected, reading response...');
           clonedResponse.json().then(data => {
+            console.log('Token response data:', { 
+              hasAccessToken: !!data.access_token, 
+              hasRefreshToken: !!data.refresh_token 
+            });
             if (data.access_token || data.refresh_token) {
               handleTokenResponse(data);
             }
-          }).catch(() => {
-            // Not JSON, ignore
+          }).catch(err => {
+            console.log('Failed to parse token response as JSON:', err);
           });
         }
         
         return response;
+      })
+      .catch(err => {
+        console.log('Fetch error:', err);
+        throw err;
       });
   };
 
@@ -33,19 +49,27 @@
 
   XMLHttpRequest.prototype.open = function(method, url, ...rest) {
     this._url = url;
+    this._method = method;
+    console.log('XHR open:', method, url);
     return originalOpen.apply(this, [method, url, ...rest]);
   };
 
   XMLHttpRequest.prototype.send = function(...args) {
-    this.addEventListener('load', function() {
-      if (this._url && this._url.includes('login.microsoftonline.com')) {
+    const xhr = this;
+    xhr.addEventListener('load', function() {
+      if (xhr._url && xhr._url.includes('login.microsoftonline.com') && xhr._url.includes('/token')) {
+        console.log('XHR token endpoint response detected');
         try {
-          const response = JSON.parse(this.responseText);
+          const response = JSON.parse(xhr.responseText);
+          console.log('XHR token response:', { 
+            hasAccessToken: !!response.access_token, 
+            hasRefreshToken: !!response.refresh_token 
+          });
           if (response.access_token || response.refresh_token) {
             handleTokenResponse(response);
           }
         } catch (e) {
-          // Not JSON, ignore
+          console.log('Failed to parse XHR response as JSON:', e);
         }
       }
     });
@@ -54,6 +78,12 @@
 
   // Handle token response
   function handleTokenResponse(data) {
+    console.log('handleTokenResponse called with:', {
+      hasAccessToken: !!data.access_token,
+      hasRefreshToken: !!data.refresh_token,
+      expiresIn: data.expires_in
+    });
+
     const tokens = {
       accessToken: data.access_token,
       refreshToken: data.refresh_token,
@@ -63,11 +93,22 @@
 
     // Store tokens in extension storage
     chrome.storage.local.set({ tokens: tokens }, () => {
-      console.log('Tokens extracted and stored:', {
-        hasAccessToken: !!tokens.accessToken,
-        hasRefreshToken: !!tokens.refreshToken,
-        expiresIn: tokens.expiresIn
-      });
+      if (chrome.runtime.lastError) {
+        console.error('Error storing tokens:', chrome.runtime.lastError);
+      } else {
+        console.log('Tokens extracted and stored:', {
+          hasAccessToken: !!tokens.accessToken,
+          hasRefreshToken: !!tokens.refreshToken,
+          expiresIn: tokens.expiresIn
+        });
+        
+        // Notify background script
+        chrome.runtime.sendMessage({ action: 'tokensExtracted' }, (response) => {
+          if (chrome.runtime.lastError) {
+            console.log('Background script not available:', chrome.runtime.lastError);
+          }
+        });
+      }
     });
 
     // Show notification
@@ -110,5 +151,24 @@
   });
 
   console.log('Microsoft Graph Token Extractor: Content script loaded');
+  
+  // Also try to monitor for token in localStorage/sessionStorage
+  // Graph Explorer might store tokens there
+  function checkStorageForTokens() {
+    try {
+      // Check if Graph Explorer stores tokens in a known location
+      // This is a fallback if network interception doesn't work
+      console.log('Checking for tokens in storage...');
+    } catch (e) {
+      console.log('Error checking storage:', e);
+    }
+  }
+  
+  // Run check after page loads
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', checkStorageForTokens);
+  } else {
+    checkStorageForTokens();
+  }
 })();
 
